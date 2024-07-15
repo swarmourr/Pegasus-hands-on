@@ -1,0 +1,65 @@
+FROM debian:buster
+
+ENV DEBIAN_FRONTEND=noninteractive
+
+
+RUN apt-get update && apt-get install -y \
+    wget \
+    python3 \
+    python3-pip \
+    gcc \
+    g++ \
+    make \
+    libssl-dev \
+    libbz2-dev \
+    libffi-dev \
+    zlib1g-dev \
+    gnupg \
+    graphviz \
+    python3-yaml \
+    python3-openssl \
+    ca-certificates
+
+
+# Upgrade pip and install Python packages
+RUN python3 -m pip install --upgrade pip
+RUN python3 -m pip install GitPython
+RUN python3 -m pip install --ignore-installed PyYAML
+RUN python3 -m pip install pyyaml pegasus-wms pika pyOpenSSL
+
+# Add Pegasus repository and install Pegasus
+RUN wget -O - https://download.pegasus.isi.edu/pegasus/gpg.txt | apt-key add - && \
+    echo 'deb https://download.pegasus.isi.edu/pegasus/debian buster main' > /etc/apt/sources.list.d/pegasus.list && \
+    apt-get update && \
+    apt-get install -y pegasus
+
+
+# Add HTCondor repository and install HTCondor
+RUN wget -O - https://research.cs.wisc.edu/htcondor/debian/HTCondor-Release.gpg.key | apt-key add -  && \
+    echo "deb http://research.cs.wisc.edu/htcondor/debian/8.8/buster buster contrib" >  /etc/apt/sources.list.d/htcondor.list && \
+    echo "deb-src http://research.cs.wisc.edu/htcondor/debian/8.8/buster buster contrib" >> /etc/apt/sources.list.d/htcondor.list && \
+    apt-get update && \
+    DEBIAN_FRONTEND=noninteractive apt-get install -y htcondor
+
+
+# Set environment variables for Pegasus from code source 
+RUN echo 'export PYTHONPATH=$(pegasus-config --python)' >> /etc/profile.d/pegasus.sh && \
+echo 'export PERL5LIB=$(pegasus-config --perl)' >> /etc/profile.d/pegasus.sh && \
+echo 'export CLASSPATH=$(pegasus-config --classpath)' >> /etc/profile.d/pegasus.sh
+RUN echo 'export PATH=/usr/bin:$PATH' >> /etc/profile.d/pegasus.sh
+
+# Configure HTCondor
+RUN echo "DAEMON_LIST = MASTER, SCHEDD, COLLECTOR, NEGOTIATOR" >> /etc/condor/condor_config
+RUN echo "SCHEDD_NAME = my_schedd" >> /etc/condor/condor_config
+RUN echo "SCHEDD_ADDRESS_FILE = /var/lib/condor/schedd_address" >> /etc/condor/condor_config
+RUN echo "ALLOW_WRITE = *" >> /etc/condor/condor_config
+RUN echo "ALLOW_READ = *" >> /etc/condor/condor_config
+
+
+# Clean up
+RUN apt-get clean && rm -rf /var/lib/apt/lists/*
+
+# Set working directory
+WORKDIR /app
+
+CMD ["/bin/bash"]
